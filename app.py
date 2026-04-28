@@ -1,138 +1,236 @@
 # ============================================
 # 📦 IMPORTS
 # ============================================
-from dash import Dash, html, dcc
+from dash import Dash, html, dcc, Input, Output
 import pandas as pd
 import plotly.express as px
 
 # ============================================
-# 📂 CARREGAR DADOS (com segurança)
+# 📂 DADOS
 # ============================================
-try:
-    df_erros = pd.read_csv("analise_erros.csv")
-    df_resumo = pd.read_csv("resumo_erros.csv")
-    df_features = pd.read_csv("features.csv")
-    df_intervencao = pd.read_csv("intervencao.csv")
-except Exception as e:
-    print("❌ Erro ao carregar CSV:", e)
-    exit()
+df_resultados = pd.read_csv("alunos_resultado.csv")
+df_erros = pd.read_csv("alunos_erros_detalhados.csv")
+df_intervencoes = pd.read_csv("alunos_intervencao.csv")
 
 # ============================================
-# 🎯 DADOS PRINCIPAIS
-# ============================================
-score = int(df_intervencao["score"][0])
-nivel_erro = df_intervencao["nivel_erro"][0]
-recomendacoes = df_intervencao["recomendacoes"][0]
-
-# ============================================
-# 📊 GRÁFICOS
-# ============================================
-
-# Gráfico de erros
-df_plot = df_resumo.melt(var_name="tipo", value_name="quantidade")
-
-fig_erros = px.bar(
-    df_plot,
-    x="tipo",
-    y="quantidade",
-    title="Distribuição de Erros"
-)
-
-# ============================================
-# 🎨 APP DASH
+# 🎨 APP
 # ============================================
 app = Dash(__name__)
 
-app.layout = html.Div(style={"fontFamily": "Arial", "padding": "20px"}, children=[
+# ============================================
+# 🎯 FUNÇÃO CARD
+# ============================================
+def card(titulo, valor):
+    return html.Div([
+        html.H4(titulo),
+        html.H2(valor)
+    ], style={
+        "background": "white",
+        "padding": "20px",
+        "borderRadius": "12px",
+        "boxShadow": "0 2px 8px rgba(0,0,0,0.1)",
+        "flex": "1",
+        "textAlign": "center"
+    })
 
-    html.H1("📊 Dashboard de Alfabetização", style={"textAlign": "center"}),
+# ============================================
+# 🧱 LAYOUT
+# ============================================
+app.layout = html.Div(style={
+    "fontFamily": "Arial",
+    "background": "#f4f6f9",
+    "padding": "20px"
+}, children=[
+
+    html.H1("📊 Dashboard Inteligente de Alfabetização", style={"textAlign": "center"}),
 
     # =========================
-    # KPI PRINCIPAL
+    # 🎯 FILTRO
+    # =========================
+    dcc.Dropdown(
+        id="aluno-dropdown",
+        options=[{"label": f"Aluno {i}", "value": i} for i in df_resultados["aluno_id"]],
+        value=1
+    ),
+
+    # =========================
+    # 🚨 ALERTA
+    # =========================
+    html.Div(id="alerta"),
+
+    # =========================
+    # 📊 CARDS KPI
+    # =========================
+    html.Div(id="kpis", style={"display": "flex", "gap": "10px", "marginTop": "20px"}),
+
+    # =========================
+    # 📈 GRÁFICO ERROS
+    # =========================
+    dcc.Graph(id="grafico-erros"),
+
+    # =========================
+    # ❌ RESUMO + 🧠 INTERVENÇÃO
+    # =========================
+    html.Div(id="resumo-erros", style={"marginTop": "20px"}),
+
+    # =========================
+    # 📋 TABELA DETALHADA
+    # =========================
+    html.Div(id="tabela-erros", style={"marginTop": "20px"}),
+
+    # =========================
+    # 🏆 RANKING
     # =========================
     html.Div([
+        html.H3("🏆 Ranking de Alunos"),
+
         html.Div([
-            html.H2("Score"),
-            html.H1(score)
-        ], style={"flex": "1", "textAlign": "center"}),
+            html.Div([
+                html.H4("🔴 Piores (maior score)"),
+                html.Ul([
+                    html.Li(f"Aluno {row.aluno_id} - Score {row.score}")
+                    for _, row in df_resultados.sort_values(by="score", ascending=False).head(5).iterrows()
+                ])
+            ], style={"flex": 1}),
 
-        html.Div([
-            html.H2("Nível de Erro"),
-            html.H3(nivel_erro)
-        ], style={"flex": "1", "textAlign": "center"}),
+            html.Div([
+                html.H4("🟢 Melhores (menor score)"),
+                html.Ul([
+                    html.Li(f"Aluno {row.aluno_id} - Score {row.score}")
+                    for _, row in df_resultados.sort_values(by="score", ascending=True).head(5).iterrows()
+                ])
+            ], style={"flex": 1}),
 
-    ], style={"display": "flex", "margin": "20px"}),
+        ], style={"display": "flex", "gap": "20px"})
+    ], style={"marginTop": "40px"}),
 
     # =========================
-    # FEATURES
+    # 📊 ROSCA FINAL
     # =========================
     html.Div([
-        html.H3("📈 Features"),
+        html.H3("📊 Distribuição de Níveis (Todos os Alunos)", style={"textAlign": "center"}),
+
+        dcc.Graph(
+            figure=px.pie(
+                df_resultados,
+                names="nivel",
+                color="nivel",
+                hole=0.5
+            )
+        )
+    ], style={"marginTop": "40px"})
+])
+
+# ============================================
+# 🔄 CALLBACK
+# ============================================
+@app.callback(
+    [
+        Output("kpis", "children"),
+        Output("grafico-erros", "figure"),
+        Output("alerta", "children"),
+        Output("resumo-erros", "children"),
+        Output("tabela-erros", "children"),
+    ],
+    [Input("aluno-dropdown", "value")]
+)
+def atualizar(aluno_id):
+
+    df_a = df_resultados[df_resultados["aluno_id"] == aluno_id]
+    df_e = df_erros[df_erros["aluno_id"] == aluno_id]
+    df_i = df_intervencoes[df_intervencoes["aluno_id"] == aluno_id]
+
+    nivel = df_a["nivel"].values[0]
+    score = df_a["score"].values[0]
+    nivel_erro = df_a["nivel_erro"].values[0]
+
+    # =========================
+    # 🚨 ALERTA
+    # =========================
+    if score > 3:
+        alerta = html.Div("🚨 Aluno em nível crítico! Intervenção urgente necessária.", style={
+            "background": "#ffcccc",
+            "padding": "10px",
+            "borderRadius": "8px",
+            "marginTop": "10px"
+        })
+    else:
+        alerta = html.Div("✅ Situação sob controle", style={
+            "background": "#ccffcc",
+            "padding": "10px",
+            "borderRadius": "8px",
+            "marginTop": "10px"
+        })
+
+    # =========================
+    # 📊 CARDS
+    # =========================
+    kpis = [
+        card("Nível", nivel),
+        card("Score", score),
+        card("Nível de Erro", nivel_erro)
+    ]
+
+    # =========================
+    # 📈 GRÁFICO
+    # =========================
+    resumo_df = df_e["tipo"].value_counts().reset_index()
+    resumo_df.columns = ["tipo", "quantidade"]
+
+    fig = px.bar(resumo_df, x="tipo", y="quantidade", title="Erros do Aluno")
+
+    # =========================
+    # ❌ RESUMO DE ERROS
+    # =========================
+    contagem = df_e["tipo"].value_counts()
+
+    resumo = html.Div([
+        html.H3("❌ Resumo de tipos"),
         html.Ul([
-            html.Li(f"Total de palavras: {df_features['total_palavras'][0]}"),
-            html.Li(f"Tamanho médio: {df_features['tamanho_medio'][0]:.2f}"),
-            html.Li(f"Diversidade lexical: {df_features['diversidade_lexica'][0]:.2f}"),
-            html.Li(f"Erro médio: {df_features['erro_medio'][0]:.2f}")
+            html.Li(f"Omissão: {contagem.get('omissao', 0)}"),
+            html.Li(f"Adição: {contagem.get('adicao', 0)}"),
+            html.Li(f"Substituição: {contagem.get('substituicao', 0)}"),
+            html.Li(f"Fonológico: {contagem.get('fonologico', 0)}"),
         ])
-    ], style={"marginTop": "20px"}),
+    ])
 
     # =========================
-    # GRÁFICO
+    # 🧠 INTERVENÇÃO
     # =========================
-    html.Div([
-        dcc.Graph(figure=fig_erros)
-    ]),
-
-    # =========================
-    # RESUMO ERROS
-    # =========================
-    html.Div([
-        html.H3("❌ Resumo de Erros"),
-        html.Ul([
-            html.Li(f"Omissão: {df_resumo['omissao'][0]}"),
-            html.Li(f"Adição: {df_resumo['adicao'][0]}"),
-            html.Li(f"Substituição: {df_resumo['substituicao'][0]}"),
-            html.Li(f"Fonológico: {df_resumo['fonologico'][0]}")
-        ])
-    ], style={"marginTop": "20px"}),
-
-    # =========================
-    # INTERVENÇÃO
-    # =========================
-    html.Div([
+    intervencao = html.Div([
         html.H3("🧠 Intervenções"),
-        html.Div(recomendacoes, style={
+        html.Div(df_i["recomendacoes"].values[0], style={
             "background": "#f8f9fa",
             "padding": "10px",
             "borderRadius": "8px"
         })
-    ], style={"marginTop": "20px"}),
+    ])
+
+    bloco_resumo = html.Div([resumo, intervencao])
 
     # =========================
-    # TABELA DE ERROS
+    # 📋 TABELA
     # =========================
-    html.Div([
-        html.H3("📋 Detalhamento dos Erros"),
-        html.Table([
-            html.Thead(
-                html.Tr([html.Th(col) for col in df_erros.columns])
-            ),
-            html.Tbody([
-                html.Tr([
-                    html.Td(df_erros.iloc[i][col]) for col in df_erros.columns
-                ]) for i in range(len(df_erros))
-            ])
-        ], style={"width": "100%", "border": "1px solid black"})
-    ], style={"marginTop": "20px"})
+    tabela = html.Table([
+        html.Thead(
+            html.Tr([html.Th(col) for col in df_e.columns])
+        ),
+        html.Tbody([
+            html.Tr([
+                html.Td(df_e.iloc[i][col]) for col in df_e.columns
+            ]) for i in range(len(df_e))
+        ])
+    ], style={
+        "width": "100%",
+        "border": "1px solid #ccc",
+        "marginTop": "10px"
+    })
 
-])
+    return kpis, fig, alerta, bloco_resumo, tabela
+
 
 # ============================================
-# ▶️ RODAR APP
+# ▶️ RUN
 # ============================================
-# no final do app.py
-
-server = app.server  # 👈 ESSENCIAL pro Render
-
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True)
