@@ -229,8 +229,8 @@ def atualizar(aluno_id):
     return kpis, fig, alerta, bloco_resumo, tabela
 
 
-# ============================================
-# ▶️ RUN
-# ============================================
+
+server = app.server
+
 if __name__ == "__main__":
     app.run(debug=True)
