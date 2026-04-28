@@ -130,5 +130,9 @@ app.layout = html.Div(style={"fontFamily": "Arial", "padding": "20px"}, children
 # ============================================
 # ▶️ RODAR APP
 # ============================================
+# no final do app.py
+
+server = app.server  # 👈 ESSENCIAL pro Render
+
 if __name__ == "__main__":
-    app.run(debug=True, port=8050)
+    app.run(debug=False)
